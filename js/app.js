@@ -85,8 +85,13 @@
     var n = pendingCount();
     if (n > 0) s += '<button type="button" class="alert" data-go="pending"><span>「この支払い何？」が <b>' + n + '件</b> たまっています</span><span>答える ›</span></button>';
 
-    if (h.comment && (h.comment.text || h.comment.over)) {
-      s += '<div class="ai">💡 ' + esc(h.comment.text) + '<b>' + esc(h.comment.over) + '</b></div>';
+    var over = h.comment ? h.comment.over : '';
+    if (h.ai && h.ai.text) {
+      s += '<div class="ai"><div class="ait">🤖 ' + esc(h.ai.text) + '</div>'
+        + (over ? '<b>' + esc(over) + '</b>' : '')
+        + '<small>クロコのひとこと ' + md(h.ai.date) + '</small></div>';
+    } else if (h.comment && (h.comment.text || over)) {
+      s += '<div class="ai">💡 ' + esc(h.comment.text) + '<b>' + esc(over) + '</b></div>';
     }
 
     if (h.budgets.length) {
