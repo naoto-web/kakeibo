@@ -20,6 +20,15 @@ var API = (function () {
     history.replaceState(null, '', location.pathname + location.hash);
   })();
 
+  // 貼り付けた文（リンクごとでも鍵だけでもよい）から鍵を取り出して覚える。取れたら true
+  // iPhoneはSafariとホーム画面のアプリで保存場所が別＝ホーム画面のアプリには、リンクを貼り付けて入れる
+  function setKeyFrom(text) {
+    var m = String(text || '').match(/(?:^|[?&=\s])([0-9a-f]{32})(?:$|[&\s#])/i) || String(text || '').match(/^\s*([0-9a-f]{32})\s*$/i);
+    if (!m) return false;
+    store(KEY_NAME, m[1].toLowerCase());
+    return !!store(KEY_NAME);
+  }
+
   function hasKey() { return !!store(KEY_NAME); }
   function forgetKey() { store(KEY_NAME, null); }
 
@@ -58,7 +67,7 @@ var API = (function () {
   }
 
   return {
-    call: call, hasKey: hasKey, forgetKey: forgetKey,
+    call: call, hasKey: hasKey, forgetKey: forgetKey, setKeyFrom: setKeyFrom,
     canInstall: canInstall, install: install, isStandalone: isStandalone, isIos: isIos,
     onInstallable: function (f) { onInstallable = f; }
   };
