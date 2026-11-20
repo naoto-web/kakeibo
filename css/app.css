@@ -118,6 +118,7 @@
   .tag.cash{background:#fff7e6;color:var(--amber)}
   .tag.r{background:#e6f4f3;color:var(--accent)}
   .tag.wait{background:var(--chip);color:var(--sub)}
+  .tag.med{background:#eef3fb;color:#2b5797}
   .item.tap{cursor:pointer}
   .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
   .th{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fafbfc;aspect-ratio:3/4}
