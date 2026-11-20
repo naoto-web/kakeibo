@@ -618,6 +618,9 @@
     return false;
   }
   function keepHito() { var h = $('rHito'); if (h && draft) draft.hitokoto = h.value.replace(/^\s+|\s+$/g, ''); }
+  // URLの #r=レシートID で、そのレシートを直接開く（動作確認用）
+  var hashR = location.hash.match(/^#r=([0-9A-Za-z-]+)$/);
+  if (hashR) { rId = hashR[1]; tab = 'rone'; }
   ['camIn', 'pickIn'].forEach(function (id) {
     $(id).addEventListener('change', function () { var f = this.files; addFiles(f); this.value = ''; });
   });
