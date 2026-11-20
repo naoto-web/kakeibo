@@ -66,8 +66,16 @@
   function showNoKey(lead) {
     D = null;
     $('body').innerHTML = '<div class="card"><b>' + esc(lead) + '</b>'
-      + '<div class="sub">なおとから届いた「鍵つきのリンク」をこのスマホで1回開くと、使えるようになります。</div></div>';
+      + '<div class="sub">なおとから届いた「鍵つきのリンク」をこのスマホで1回開くと、使えるようになります。</div>'
+      + '<div class="sub" style="margin-top:10px">ホーム画面に置いたアプリで開いている場合（iPhoneなど）は、リンクを長押しでコピーして、下に貼り付けてください。</div>'
+      + '<input class="inp" type="text" id="keyPaste" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ここに鍵つきのリンクを貼り付け">'
+      + '<button type="button" class="send" id="keySave">これで使えるようにする</button></div>';
   }
+  document.addEventListener('click', function (e) {
+    if (!e.target || e.target.id !== 'keySave') return;
+    if (API.setKeyFrom($('keyPaste').value)) { toast('鍵を入れました'); call('appLoad'); }
+    else toast('鍵が見つかりません。届いたリンクをそのまま貼り付けてください');
+  });
   function installCard() {
     if (API.isStandalone()) return '';
     if (API.canInstall()) return '<button type="button" class="install" id="installBtn">📲 アプリとしてインストール</button>';
