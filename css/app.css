@@ -147,6 +147,13 @@
   .kit.tap{cursor:pointer}
   .box.date{width:170px;text-align:left;font-size:15px}
   b.back{color:var(--green)}
+  .fsum{font-size:14px;margin:2px 0 8px}
+  .frow{display:grid;grid-template-columns:52px 1fr 1fr 1.1fr;gap:6px;font-size:12.5px;padding:5px 0;border-top:1px dashed var(--line);font-variant-numeric:tabular-nums;text-align:right}
+  .frow span:first-child{text-align:left}
+  .frow small{display:block;font-size:9.5px;color:var(--sub)}
+  .frow.fh{color:var(--sub);font-size:10.5px;border-top:0}
+  .frow b.thin{color:var(--amber)}
+  .fnote{font-size:10.5px;color:var(--sub);padding:0 0 4px 58px;line-height:1.5}
   .mini{font-size:11px;padding:3px 8px;border-radius:8px;border:1px solid #f3c4bf;background:#fff;color:var(--red);margin-left:6px;font-weight:400}
   .rphoto{display:block;width:100%;border-radius:10px;border:1px solid var(--line);margin-top:8px}
 
