@@ -1,11 +1,19 @@
 (function () {
   var D = null;
-  var tab = 'home';
+  // URLの #jigyo などで最初に開くタブを選べる（動作確認用）
+  var tab = (location.hash.match(/^#(home|pending|shikin|jigyo|zandaka)$/) || [])[1] || 'home';
   var busy = false;
   var picks = {};
+  var jigyoSel = 'なおと';
+  var jigyoYm = '';
 
   function $(id) { return document.getElementById(id); }
+  // 画面に出す文字。シートの中の「Naoto」（口座名・持ち主・メモ）は、出すときに「なおと」にする（11/20 Naoto指定）
   function esc(s) {
+    return attr(String(s == null ? '' : s).replace(/Naoto/g, 'なおと'));
+  }
+  // 属性に入れる値（口座名などサーバーへ送り返すもの）はそのまま
+  function attr(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
@@ -57,7 +65,7 @@
   function showNoKey(lead) {
     D = null;
     $('body').innerHTML = '<div class="card"><b>' + esc(lead) + '</b>'
-      + '<div class="sub">Naotoから届いた「鍵つきのリンク」をこのスマホで1回開くと、使えるようになります。</div></div>';
+      + '<div class="sub">なおとから届いた「鍵つきのリンク」をこのスマホで1回開くと、使えるようになります。</div></div>';
   }
   function installCard() {
     if (API.isStandalone()) return '';
@@ -135,10 +143,10 @@
     if (!open.length) s += '<div class="empty">ぜんぶ答え済みです 🎉</div>';
     open.forEach(function (p) {
       var pick = picks[p.importId] || {};
-      s += '<div class="card" data-id="' + esc(p.importId) + '" data-row="' + p.row + '">' + pendingHead(p) + '<div class="btns">';
+      s += '<div class="card" data-id="' + attr(p.importId) + '" data-row="' + p.row + '">' + pendingHead(p) + '<div class="btns">';
       D.buttons.forEach(function (b) {
         var on = pick.label === b.label;
-        s += '<button type="button" class="btn' + (on ? ' on' : '') + '" data-label="' + esc(b.label) + '"'
+        s += '<button type="button" class="btn' + (on ? ' on' : '') + '" data-label="' + attr(b.label) + '"'
           + (!b.main && !pick.more && !on ? ' hidden' : '') + '>' + esc(b.label) + '</button>';
       });
       if (!pick.more) s += '<button type="button" class="btn" data-more="1">ほか…</button>';
@@ -275,7 +283,7 @@
   // ─── ④ 残高 ───
   var WALLETS = [
     ['家計', '家計'],
-    ['Naoto事業', 'Naotoの事業'],
+    ['Naoto事業', 'なおとの事業'],
     ['ひょい事業', 'ひょいの事業（何か月もつかの計算には入れない）']
   ];
   function viewZandaka() {
@@ -304,7 +312,7 @@
   function field(kind, key, label, prevDate, prevAmount) {
     return '<div class="field"><div class="n">' + esc(label) + '<small>'
       + (prevAmount == null ? 'まだ記録なし' : '前回 ' + md(prevDate) + '　' + yen(prevAmount)) + '</small></div>'
-      + '<input class="box" type="text" inputmode="numeric" autocomplete="off" data-kind="' + kind + '" data-key="' + esc(key) + '" placeholder="'
+      + '<input class="box" type="text" inputmode="numeric" autocomplete="off" data-kind="' + kind + '" data-key="' + attr(key) + '" placeholder="'
       + (prevAmount == null ? '0' : yen(prevAmount)) + '"></div>';
   }
   function digits(v) {
@@ -328,10 +336,98 @@
     });
   }
 
+  // ─── ④ 事業（なおとの事業／ひょいの事業） ───
+  function viewJigyo() {
+    if (!D.jigyo) return '<div class="empty">事業のページはまだ準備中です</div>';
+    var list = D.jigyo.list, s = '<div class="seg">';
+    var j = list.filter(function (x) { return x.id === jigyoSel; })[0] || list[0];
+    list.forEach(function (x) {
+      s += '<button type="button" data-jigyo="' + attr(x.id) + '"' + (x.id === j.id ? ' class="on"' : '') + '>' + esc(x.mark + ' ' + x.label) + '</button>';
+    });
+    s += '</div>';
+
+    var cur = j.months.filter(function (m) { return m.ym === D.jigyo.ym; })[0];
+    s += '<div class="card"><div class="lbl">' + Number(cur.ym.substring(5, 7)) + '月の利益（売上 − 経費）</div>'
+      + '<div class="big' + (cur.rieki < 0 ? ' minus' : '') + '">' + yen(cur.rieki) + '<span>円</span>' + rate(cur.rate) + '</div>'
+      + '<div class="kv"><span>売上</span><b>' + yen(cur.uriage) + '</b></div>'
+      + '<div class="kv"><span>経費<small>カード ' + yen(cur.card) + ' ＋ カード以外 ' + yen(cur.etc) + '</small></span><b>' + yen(cur.keihi) + '</b></div>';
+    if (!cur.uriage && !cur.etc) s += '<div class="sub">今月の売上はまだ入っていません（下の「売上を入れる」から）</div>';
+    s += '</div>';
+
+    var t = j.total;
+    var range = Number(t.from.substring(5, 7)) + (t.from === t.to ? '' : '〜' + Number(t.to.substring(5, 7))) + '月';
+    s += '<div class="card"><div class="lbl">' + j.year + '年の合計（' + range + '）</div>'
+      + '<div class="kv"><span>売上</span><b>' + yen(t.uriage) + '</b></div>'
+      + '<div class="kv"><span>経費</span><b>' + yen(t.keihi) + '</b></div>'
+      + '<div class="kv"><span><b>利益</b></span><b' + (t.rieki < 0 ? ' class="minus"' : '') + '>' + yen(t.rieki)
+      + (t.rate == null ? '' : '　<span class="pct">' + t.rate + '%</span>') + '</b></div></div>';
+
+    var shown = j.months.filter(function (m) { return m.uriage || m.keihi || m.ym === D.jigyo.ym; });
+    var max = Math.max.apply(null, shown.map(function (m) { return Math.max(m.uriage, m.keihi); }).concat([1]));
+    s += '<div class="card"><div class="lbl two"><span>月ごと</span><span>右の数字＝利益</span></div>';
+    shown.forEach(function (m) {
+      s += '<div class="mrow"><span>' + Number(m.ym.substring(5, 7)) + '月</span><div class="mbars">'
+        + '<i style="width:' + (m.uriage / max * 100).toFixed(1) + '%"></i><i class="k" style="width:' + (m.keihi / max * 100).toFixed(1) + '%"></i></div>'
+        + '<b' + (m.rieki < 0 ? ' class="minus"' : '') + '>' + yen(m.rieki) + '</b></div>';
+    });
+    s += '<div class="leg"><span><i></i>売上</span><span><i class="k"></i>経費</span></div></div>';
+
+    s += '<div class="card"><div class="lbl" style="margin-bottom:4px">経費の中身（' + j.year + '年の合計）</div>';
+    j.kamoku.forEach(function (k) {
+      s += '<div class="kv"><span>' + esc(k.kamoku) + '<small>カード払い・' + k.count + '件</small></span><b>' + yen(k.amount) + '</b></div>';
+    });
+    s += '<div class="kv"><span>カード以外の経費<small>下で入れた分</small></span><b>' + yen(t.etc) + '</b></div></div>';
+
+    if (!jigyoYm || D.jigyo.formMonths.indexOf(jigyoYm) === -1) jigyoYm = D.jigyo.ym;
+    var e = j.entries[jigyoYm];
+    s += '<div class="card"><div class="lbl" style="margin-bottom:2px">売上を入れる（月に1回・合計だけ）</div>'
+      + '<div class="field"><div class="n">どの月</div><select class="sel" id="jym">';
+    D.jigyo.formMonths.forEach(function (m) {
+      s += '<option value="' + m + '"' + (m === jigyoYm ? ' selected' : '') + '>' + ymLabel(m) + (j.entries[m] ? '（入力済み）' : '') + '</option>';
+    });
+    s += '</select></div>'
+      + jfield('uriage', '売上の合計', e ? '入っている額 ' + yen(e.uriage) + '（' + md(e.at) + ' ' + esc(e.by) + '）' : 'まだ入れていません', e ? e.uriage : null)
+      + jfield('keihi', 'カード以外の経費', '現金・振込で払った分', e ? e.keihi : null)
+      + '<div class="field"><div class="n">メモ</div><input class="box memo" type="text" maxlength="100" data-j="memo" placeholder="'
+      + attr(e && e.memo ? e.memo : '例：イベント出店') + '"></div>'
+      + '<button type="button" class="save" id="saveJ">保存する</button>'
+      + '<div class="sub">空の欄は前に入れた額のままです。同じ月を入れ直すと上書きします。カードで払った経費は自動で入るので、ここには入れません</div></div>';
+
+    s += '<div class="card"><div class="lbl" style="margin-bottom:4px">カードで払った経費（直近）</div>';
+    if (!j.recent.length) s += '<div class="sub">まだありません</div>';
+    j.recent.forEach(function (r) {
+      s += '<div class="kv"><span>' + esc(r.desc) + '<small>' + md(r.date) + ' ・ ' + esc(r.kamoku) + '</small></span><b>' + yen(r.amount) + '</b></div>';
+    });
+    s += '</div>';
+    return s;
+  }
+  function rate(r) { return r == null ? '' : '<span class="rate">利益率 ' + r + '%</span>'; }
+  function jfield(key, label, note, prev) {
+    return '<div class="field"><div class="n">' + esc(label) + '<small>' + note + '</small></div>'
+      + '<input class="box" type="text" inputmode="numeric" autocomplete="off" data-j="' + key + '" placeholder="' + (prev == null ? '0' : yen(prev)) + '"></div>';
+  }
+  function saveJigyo() {
+    var req = { jigyo: jigyoSel, ym: jigyoYm }, count = 0;
+    var boxes = document.querySelectorAll('[data-j]');
+    for (var i = 0; i < boxes.length; i++) {
+      var k = boxes[i].getAttribute('data-j');
+      if (k === 'memo') { var mv = boxes[i].value.replace(/^\s+|\s+$/g, ''); if (mv) { req.memo = mv; count++; } continue; }
+      var v = digits(boxes[i].value);
+      if (v === '') continue;
+      req[k] = Number(v);
+      count++;
+    }
+    if (!count) { toast('金額を入れてください'); return; }
+    var btn = $('saveJ');
+    btn.disabled = true;
+    btn.textContent = '保存しています…';
+    call('appSaveJigyo', req, function () { toast(ymLabel(req.ym) + 'の分を記録しました'); });
+  }
+
   // ─── 画面の切り替え ───
   function render() {
     if (!D) return;
-    var titles = { home: '家計簿', pending: 'この支払い何？', shikin: '資金繰り', zandaka: '残高を入れる' };
+    var titles = { home: '家計簿', pending: 'この支払い何？', shikin: '資金繰り', jigyo: '事業', zandaka: '残高を入れる' };
     $('title').textContent = titles[tab];
     var n = pendingCount();
     var sub = '';
@@ -339,10 +435,11 @@
     if (tab === 'pending') sub = n + '件';
     if (tab === 'shikin') sub = D.shikin.残高.いちばん古い記録日 ? '残高は' + md(D.shikin.残高.いちばん古い記録日) + '時点' : '';
     if (tab === 'zandaka') sub = md(D.zandaka.today);
+    if (tab === 'jigyo') sub = md(D.now) + ' ' + String(D.now).substring(11, 16) + ' 更新';
     $('topSub').textContent = sub;
     $('badge').hidden = n === 0;
     $('badge').textContent = n;
-    var views = { home: viewHome, pending: viewPending, shikin: viewShikin, zandaka: viewZandaka };
+    var views = { home: viewHome, pending: viewPending, shikin: viewShikin, jigyo: viewJigyo, zandaka: viewZandaka };
     $('body').innerHTML = views[tab]();
     var tabs = $('tabs').querySelectorAll('button');
     for (var i = 0; i < tabs.length; i++) tabs[i].className = tabs[i].getAttribute('data-tab') === tab ? 'on' : '';
@@ -367,20 +464,27 @@
     while (go && go !== this && !(go.getAttribute && go.getAttribute('data-go'))) go = go.parentNode;
     if (go && go !== this) { showTab(go.getAttribute('data-go')); return; }
     if (el.id === 'saveZ') { saveZandaka(); return; }
+    if (el.id === 'saveJ') { saveJigyo(); return; }
+    var jb = el;
+    while (jb && jb !== this && !(jb.getAttribute && jb.getAttribute('data-jigyo'))) jb = jb.parentNode;
+    if (jb && jb !== this) { jigyoSel = jb.getAttribute('data-jigyo'); render(); return; }
     if (el.id === 'installBtn') { API.install(); return; }
     if (tab === 'pending') onPendingClick(e);
   });
   $('body').addEventListener('input', function (e) {
     if (tab === 'pending') { onPendingInput(e); return; }
-    if (tab === 'zandaka' && e.target.className === 'box') {
+    if ((tab === 'zandaka' || tab === 'jigyo') && e.target.className === 'box') {
       var v = digits(e.target.value);
       e.target.value = v === '' ? '' : yen(Number(v));
     }
   });
+  $('body').addEventListener('change', function (e) {
+    if (tab === 'jigyo' && e.target.id === 'jym') { jigyoYm = e.target.value; render(); }
+  });
   // 別のアプリから戻ってきたときに、5分以上たっていたら読み直す
   var loadedAt = Date.now();
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && tab !== 'zandaka' && Date.now() - loadedAt > 5 * 60 * 1000) { loadedAt = Date.now(); call('appLoad'); }
+    if (document.visibilityState === 'visible' && tab !== 'zandaka' && tab !== 'jigyo' && Date.now() - loadedAt > 5 * 60 * 1000) { loadedAt = Date.now(); call('appLoad'); }
   });
 
   call('appLoad');
