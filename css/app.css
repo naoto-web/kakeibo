@@ -91,6 +91,24 @@
   #toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:rgba(31,41,51,.92);color:#fff;font-size:13px;padding:9px 16px;border-radius:18px;max-width:86%;z-index:10}
   #toast[hidden]{display:none}
 
+  /* ─── 事業タブ ─── */
+  .seg{display:flex;background:#e6ecef;border-radius:12px;padding:3px;margin-bottom:10px}
+  .seg button{flex:1;border:0;background:none;font-size:13px;padding:8px 0;border-radius:10px;color:var(--sub)}
+  .seg button.on{background:#fff;color:var(--accent);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .big.minus,.minus{color:var(--red)}
+  .big .rate{display:inline-block;font-size:12px;font-weight:700;color:var(--accent);background:#e6f4f3;border-radius:12px;padding:2px 10px;margin-left:8px;vertical-align:middle;letter-spacing:0}
+  .pct{color:var(--accent)}
+  .mrow{display:grid;grid-template-columns:34px 1fr 78px;gap:8px;align-items:center;font-size:12px;padding:5px 0}
+  .mbars i{display:block;height:7px;border-radius:4px;background:var(--accent);margin:2px 0;min-width:1px}
+  .mbars i.k{background:#f0b44c}
+  .mrow b{text-align:right;font-variant-numeric:tabular-nums}
+  .leg{font-size:10.5px;color:var(--sub);display:flex;gap:12px;margin-top:4px}
+  .leg i{display:inline-block;width:10px;height:7px;border-radius:3px;background:var(--accent);margin-right:4px}
+  .leg i.k{background:#f0b44c}
+  .sel{border:1px solid #c9d1d8;border-radius:10px;padding:8px 10px;font:inherit;font-size:15px;background:#fff;color:var(--ink)}
+  .box.memo{width:170px;text-align:left;font-size:15px}
+  .tabs button{font-size:10px}
+
   /* ─── アプリ版（GitHub Pages）で足した分 ─── */
   .top{padding-top:calc(14px + env(safe-area-inset-top))}
   .install{display:block;width:100%;border:0;background:var(--accent);color:#fff;border-radius:14px;padding:13px;font-weight:700;font-size:14px;margin-bottom:10px}
