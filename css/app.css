@@ -136,6 +136,17 @@
   .rhead b{font-size:22px;white-space:nowrap;font-variant-numeric:tabular-nums}
   .rhead b span{font-size:13px;margin-left:2px}
   .warnbox{background:#fdecea;border:1px solid #f3c4bf;border-radius:10px;padding:8px 10px;font-size:12px;color:var(--red);margin:8px 0}
+  .cam.three button{font-size:12.5px;padding:11px 0}
+  .bg.tap{cursor:pointer}
+  .bh .cnt{font-size:10.5px;color:var(--sub);margin-left:6px;font-weight:400}
+  .kitems{margin:6px 0 4px;padding:2px 10px;background:#f7f9fa;border-radius:10px}
+  .kit{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .kit:last-child{border-bottom:0}
+  .kit .d{color:var(--sub);font-size:10.5px}
+  .kit b{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .kit.tap{cursor:pointer}
+  .box.date{width:170px;text-align:left;font-size:15px}
+  .mini{font-size:11px;padding:3px 8px;border-radius:8px;border:1px solid #f3c4bf;background:#fff;color:var(--red);margin-left:6px;font-weight:400}
   .rphoto{display:block;width:100%;border-radius:10px;border:1px solid var(--line);margin-top:8px}
 
   /* ─── アプリ版（GitHub Pages）で足した分 ─── */
