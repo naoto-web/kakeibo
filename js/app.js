@@ -450,6 +450,7 @@
       + '<div class="sub">長いレシートは、上から順に分けて撮って足してください（同じレシートの続き）</div>';
     s += '<div class="q">何で払った？</div><div class="btns">' + opts('pay', [['カード', 'カード（アメックス）'], ['現金', '現金・PayPayなど']]) + '</div>'
       + '<div class="q">何の買い物？</div><div class="btns">' + opts('kubun', [['家計', '家計'], ['事業', 'なおとの事業'], ['事業(ひょい)', 'ひょいの事業']]) + '</div>'
+      + '<div class="q">病院・歯医者・薬局のとき：受診した人</div><div class="btns">' + opts('patient', [['', '病院ではない'], ['なおと', 'なおと'], ['ひょい', 'ひょい']]) + '</div>'
       + '<input class="inp" type="text" id="rHito" maxlength="100" placeholder="ひとこと（なくてもOK　例：実家へのおみやげ）" value="' + attr(draft.hitokoto) + '">'
       + '<button type="button" class="save" id="sendR">送る</button>'
       + '<button type="button" class="link" id="cancelR">やめる（写真を捨てる）</button>'
@@ -471,6 +472,7 @@
     else t += r.linked ? '<span class="tag r">カード明細と一致</span>' : '<span class="tag wait">カード明細待ち</span>';
     if (r.check && r.check !== 'OK') t += '<span class="tag new">合計ずれ</span>';
     if (r.kubun !== '家計') t += '<span class="tag">' + kubunLabel(r.kubun) + '</span>';
+    if (r.patient) t += '<span class="tag med">🏥' + esc(r.patient) + '</span>';
     return t;
   }
   function viewRlist() {
@@ -481,7 +483,20 @@
     rc.bunrui.forEach(function (b) {
       s += '<div class="kv"><span>' + esc(b.bunrui) + '<span class="rbar"><i style="width:' + Math.max(0, b.amount / max * 100).toFixed(1) + '%"></i></span></span><b>' + yen(b.amount) + '</b></div>';
     });
-    s += '</div><div class="card">';
+    s += '</div>';
+    var iy = rc.iryo;
+    if (iy && iy.count) {
+      s += '<div class="card"><div class="lbl" style="margin-bottom:4px">' + iy.year + '年の医療費（受診した人を選んだ' + iy.count + '枚）</div>';
+      rc.patients.forEach(function (p) {
+        if (iy.byPerson[p]) s += '<div class="kv"><span>' + esc(p) + '</span><b>' + yen(iy.byPerson[p]) + '</b></div>';
+      });
+      s += '<div class="kv"><span><b>合計</b></span><b>' + yen(iy.total) + '</b></div>';
+      iy.byPlace.slice(0, 6).forEach(function (pl) {
+        s += '<div class="kv"><span>' + esc(pl.store) + '<small>' + esc(pl.patient) + ' ・ ' + pl.count + '回</small></span><b>' + yen(pl.amount) + '</b></div>';
+      });
+      s += '<div class="sub">保険などで戻ってくる分を引いた1年の医療費が10万円（所得が少ない人は所得の5%）をこえると、確定申告の医療費控除で税金が戻ります</div></div>';
+    }
+    s += '<div class="card">';
     if (!rc.list.length) s += '<div class="sub">まだありません</div>';
     rc.list.forEach(function (r) {
       var done = r.state === '読み取り済み';
@@ -512,6 +527,15 @@
       s += '<div class="sub">読み取り待ちです。1時間以内にクロコが読みます（PCが起きているとき）</div>';
     }
     if (r.hitokoto) s += '<div class="sub">ひとこと：' + esc(r.hitokoto) + '</div>';
+    // 病院・薬局のレシートなら、受診した人をあとから選べる（医療費控除の集計用）
+    var med = r.patient || r.kamoku === '医療費' || r.items.some(function (it) { return it.bunrui === '医療・薬'; });
+    if (med) {
+      s += '<div class="q">受診した人（医療費控除の集計用）</div><div class="btns">';
+      [['', '選ばない'], ['なおと', 'なおと'], ['ひょい', 'ひょい']].forEach(function (o) {
+        s += '<button type="button" class="btn' + (r.patient === o[0] ? ' on' : '') + '" data-pat="' + attr(o[0]) + '">' + esc(o[1]) + '</button>';
+      });
+      s += '</div>';
+    }
     s += '<div class="row2" style="margin-top:10px">';
     for (var n = 1; n <= r.photos; n++) {
       s += '<button type="button" class="more" data-rph="' + n + '">' + (rOpen[r.id + '_' + n] ? '写真' + n + 'を閉じる' : '📄 写真' + n + 'を見る') + '</button>';
@@ -556,7 +580,7 @@
   function addFiles(files) {
     files = Array.prototype.slice.call(files || []);
     if (!files.length || !D || !D.receipts) return;
-    if (camFresh || !draft) draft = { images: [], pay: 'カード', kubun: '家計', hitokoto: '' };
+    if (camFresh || !draft) draft = { images: [], pay: 'カード', kubun: '家計', patient: '', hitokoto: '' };
     var max = D.receipts.maxPhotos, room = max - draft.images.length;
     if (files.length > room) toast('1枚のレシートにつき写真は' + max + '枚までです（' + room + '枚だけ足しました）');
     files = files.slice(0, room);
@@ -586,7 +610,7 @@
         keepHito();
         el.disabled = true;
         el.textContent = '送っています…';
-        call('appReceiptSend', { images: draft.images, pay: draft.pay, kubun: draft.kubun, hitokoto: draft.hitokoto }, function () {
+        call('appReceiptSend', { images: draft.images, pay: draft.pay, kubun: draft.kubun, patient: draft.patient, hitokoto: draft.hitokoto }, function () {
           draft = null;
           toast('送りました。1時間以内にクロコが読みます');
           showTab('home');
@@ -606,6 +630,13 @@
           }).catch(function (err) { rPhotos[key] = { error: err.message }; if (tab === 'rone') render(); });
         }
         render();
+        return true;
+      }
+      if (el.getAttribute('data-pat') != null) {
+        var cur = D.receipts.list.filter(function (x) { return x.id === rId; })[0];
+        var np = el.getAttribute('data-pat');
+        if (cur && cur.patient === np) return true;
+        call('appReceiptPatient', { id: rId, patient: np }, function () { toast(np ? '受診した人を「' + np + '」にしました' : '受診した人を外しました'); });
         return true;
       }
       if (el.getAttribute('data-rdel')) {
