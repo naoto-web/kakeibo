@@ -133,7 +133,7 @@
             var rid = rc && rc.linked[t.importId];
             s += '<div class="kit' + (rid ? ' tap" data-rid="' + attr(rid) : '') + '"><div>' + esc(t.desc)
               + (t.cash ? '<span class="tag cash">現金など</span>' : '') + (rid ? '<span class="tag r">🧾内訳 ›</span>' : '')
-              + '<div class="d">' + md(t.date) + ' ・ ' + esc(t.owner) + '</div></div><b>' + yen(t.amount) + '</b></div>';
+              + '<div class="d">' + md(t.date) + ' ・ ' + esc(t.owner) + '</div></div><b' + (t.amount < 0 ? ' class="back"' : '') + '>' + yen(t.amount) + '</b></div>';
           });
           s += '</div>';
         }
@@ -677,25 +677,29 @@
   // ─── レシートなしで入れる（現金・PayPay） ───
   var mdraft = null;
   function mInit() {
-    if (!mdraft) mdraft = { date: D.manual.today, amount: '', desc: '', pay: '現金', kubun: '家計', kamoku: '' };
+    if (!mdraft) mdraft = { kind: 'out', date: D.manual.today, amount: '', desc: '', pay: '現金', kubun: '家計', kamoku: '' };
   }
   function viewMnew() {
     mInit();
     var m = D.manual, list = m.kamoku[mdraft.kubun] || [];
     if (list.indexOf(mdraft.kamoku) === -1) mdraft.kamoku = '';
-    var s = '<div class="card"><div class="lbl">レシートがない現金・PayPayの支払い（カード払いは自動で入るので入れない）</div>'
+    var back = mdraft.kind === 'back';
+    var s = '<div class="card"><div class="lbl">レシートがない現金・PayPayのお金（カード払いは自動で入るので入れない）</div>'
+      + '<div class="btns">' + mopts('kind', [['out', '💸 払った'], ['back', '↩️ 戻ってきた（割り勘・返金）']]) + '</div>'
+      + (back ? '<div class="sub">払ったお金の一部が戻ってきたとき。選んだ科目から、その金額を引きます（例：飲み会をカードで払って、友達から割り勘でもらった）</div>' : '')
       + '<div class="field"><div class="n">日付</div><input class="box date" type="date" id="mDate" max="' + m.today + '" value="' + attr(mdraft.date) + '"></div>'
       + '<div class="field"><div class="n">金額</div><input class="box" type="text" inputmode="numeric" autocomplete="off" id="mAmt" placeholder="0" value="' + attr(mdraft.amount) + '"></div>'
-      + '<div class="field"><div class="n">何に</div><input class="box memo" type="text" maxlength="40" id="mDesc" placeholder="例：八百屋・ランチ" value="' + attr(mdraft.desc) + '"></div>'
-      + '<div class="q">払い方</div><div class="btns">' + mopts('pay', m.pays.map(function (p) { return [p, p === '現金' ? '💴 現金' : '📱 PayPay']; })) + '</div>'
+      + '<div class="field"><div class="n">' + (back ? '何の' : '何に') + '</div><input class="box memo" type="text" maxlength="40" id="mDesc" placeholder="'
+      + (back ? '例：飲み会の割り勘' : '例：八百屋・ランチ') + '" value="' + attr(mdraft.desc) + '"></div>'
+      + '<div class="q">' + (back ? '受け取り方' : '払い方') + '</div><div class="btns">' + mopts('pay', m.pays.map(function (p) { return [p, p === '現金' ? '💴 現金' : '📱 PayPay']; })) + '</div>'
       + '<div class="q">何の買い物？</div><div class="btns">' + mopts('kubun', [['家計', '家計'], ['事業', 'なおとの事業'], ['事業(ひょい)', 'ひょいの事業']]) + '</div>'
-      + '<div class="q">科目</div><div class="btns">' + mopts('kamoku', list.map(function (k) { return [k, k]; })) + '</div>'
+      + '<div class="q">' + (back ? 'どの科目から引く？（元の支払いの科目）' : '科目') + '</div><div class="btns">' + mopts('kamoku', list.map(function (k) { return [k, k]; })) + '</div>'
       + '<button type="button" class="save" id="saveM" style="margin-top:12px">入れる</button></div>';
     s += '<div class="card"><div class="lbl" style="margin-bottom:4px">最近手で入れたもの（入れ間違いはここで消す）</div>';
     if (!m.recent.length) s += '<div class="sub">まだありません</div>';
     m.recent.forEach(function (t) {
       s += '<div class="kv"><span>' + esc(t.desc) + '<small>' + md(t.date) + ' ・ ' + esc(t.method) + ' ・ ' + esc(t.kamoku) + (t.kubun !== '家計' ? '（' + kubunLabel(t.kubun) + '）' : '') + '</small></span>'
-        + '<b>' + yen(t.amount) + ' <button type="button" class="mini" data-mdel="' + attr(t.importId) + '" data-mrow="' + t.row + '">消す</button></b></div>';
+        + '<b' + (t.amount < 0 ? ' class="back"' : '') + '>' + (t.amount < 0 ? '↩️ ' : '') + yen(t.amount) + ' <button type="button" class="mini" data-mdel="' + attr(t.importId) + '" data-mrow="' + t.row + '">消す</button></b></div>';
     });
     return s + '</div>';
   }
@@ -721,10 +725,10 @@
       if (!mdraft.kamoku) { toast('科目を選んでください'); return true; }
       el.disabled = true;
       el.textContent = '入れています…';
-      var req = { date: mdraft.date, amount: Number(amt), desc: mdraft.desc, pay: mdraft.pay, kubun: mdraft.kubun, kamoku: mdraft.kamoku };
+      var req = { date: mdraft.date, amount: Number(amt), desc: mdraft.desc, pay: mdraft.pay, kubun: mdraft.kubun, kamoku: mdraft.kamoku, back: mdraft.kind === 'back' };
       call('appManualAdd', req, function () {
-        toast(md(req.date) + ' ' + yen(req.amount) + '円を入れました');
-        mdraft = { date: req.date, amount: '', desc: '', pay: req.pay, kubun: req.kubun, kamoku: '' };
+        toast(req.back ? req.kamoku + 'から ' + yen(req.amount) + '円を引きました' : md(req.date) + ' ' + yen(req.amount) + '円を入れました');
+        mdraft = { kind: 'out', date: req.date, amount: '', desc: '', pay: req.pay, kubun: req.kubun, kamoku: '' };
         render();
       });
       return true;
