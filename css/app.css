@@ -146,6 +146,7 @@
   .kit b{font-variant-numeric:tabular-nums;white-space:nowrap}
   .kit.tap{cursor:pointer}
   .box.date{width:170px;text-align:left;font-size:15px}
+  b.back{color:var(--green)}
   .mini{font-size:11px;padding:3px 8px;border-radius:8px;border:1px solid #f3c4bf;background:#fff;color:var(--red);margin-left:6px;font-weight:400}
   .rphoto{display:block;width:100%;border-radius:10px;border:1px solid var(--line);margin-top:8px}
 
