@@ -1,7 +1,7 @@
 (function () {
   var D = null;
   // URLの #jigyo などで最初に開くタブを選べる（動作確認用）
-  var tab = (location.hash.match(/^#(home|pending|shikin|jigyo|zandaka)$/) || [])[1] || 'home';
+  var tab = (location.hash.match(/^#(home|pending|shikin|jigyo|zandaka|rlist)$/) || [])[1] || 'home';
   var busy = false;
   var picks = {};
   var jigyoSel = 'なおと';
@@ -83,15 +83,19 @@
 
   // ─── ① ホーム ───
   function viewHome() {
-    var h = D.home, s = installCard();
-    s += '<div class="card"><div class="lbl">' + h.month + '月 これまでに使ったお金（家計・カード払い）</div>'
+    var h = D.home, s = installCard(), rc = D.receipts;
+    if (rc) s += '<div class="cam"><button type="button" data-cam="cam">📷 レシートを撮る</button><button type="button" class="s" data-cam="pick">🖼 写真を選ぶ</button></div>';
+    s += '<div class="card"><div class="lbl">' + h.month + '月 これまでに使ったお金（家計）</div>'
       + '<div class="big">' + yen(h.spent) + '<span>円</span></div>'
+      + (h.spentCash ? '<div class="sub">カード払い ' + yen(h.spent - h.spentCash) + '円 ＋ 現金など（レシート） ' + yen(h.spentCash) + '円</div>' : '')
       + '<div class="sub">' + h.prevMonth + '月は1か月で ' + yen(h.prevSpent) + '円（' + esc(h.avgLabel) + 'の平均 ' + yen(h.avg3) + '円）</div>'
       + (h.tokubetsu ? '<div class="sub">このほかに旅行・特別費 ' + yen(h.tokubetsu) + '円</div>' : '')
       + '</div>';
 
     var n = pendingCount();
     if (n > 0) s += '<button type="button" class="alert" data-go="pending"><span>「この支払い何？」が <b>' + n + '件</b> たまっています</span><span>答える ›</span></button>';
+    if (rc) s += '<button type="button" class="go" data-go="rlist"><span>🧾 レシート　今月 <b>' + rc.count + '枚</b>'
+      + (rc.waiting ? '（読み取り待ち ' + rc.waiting + '枚）' : '') + '</span><span>見る ›</span></button>';
 
     var over = h.comment ? h.comment.over : '';
     if (h.ai && h.ai.text) {
@@ -126,7 +130,10 @@
     s += '<div class="card"><div class="lbl">直近の利用</div>';
     if (!h.recent.length) s += '<div class="sub">まだありません</div>';
     h.recent.forEach(function (t) {
-      s += '<div class="item"><div>' + esc(t.desc) + (t.sokuho ? '<span class="tag new">速報</span>' : '')
+      var hasR = rc && t.importId && rc.linked[t.importId];
+      s += '<div class="item"' + (hasR ? ' data-rid="' + attr(rc.linked[t.importId]) + '"' : '') + '><div>' + esc(t.desc)
+        + (t.sokuho ? '<span class="tag new">速報</span>' : '') + (t.cash ? '<span class="tag cash">現金など</span>' : '')
+        + (hasR ? '<span class="tag r">🧾内訳</span>' : '')
         + '<div class="d">' + md(t.date) + (t.time ? ' ' + esc(t.time) : '') + ' ・ ' + esc(t.owner) + ' ・ '
         + esc(t.kamoku === '未分類' ? '確認待ち' : t.kamoku) + '</div></div><div class="a">' + yen(t.amount) + '</div></div>';
     });
@@ -424,10 +431,202 @@
     call('appSaveJigyo', req, function () { toast(ymLabel(req.ym) + 'の分を記録しました'); });
   }
 
+  // ─── レシート（送る／一覧／1枚の中身） ───
+  // draft＝送る前の1枚のレシート（写真は5枚まで＝長いレシートを分けて撮れる）
+  var draft = null, rId = '', camFresh = true, rOpen = {}, rPhotos = {};
+  var MAX_SIDE = 1800;
+  function camButtons() {
+    return '<div class="cam"><button type="button" data-cam="cam">📷 レシートを撮る</button><button type="button" class="s" data-cam="pick">🖼 写真を選ぶ</button></div>';
+  }
+  function viewRnew() {
+    if (!draft || !draft.images.length) return '<div class="empty">写真がありません</div>' + camButtons();
+    var max = D.receipts.maxPhotos, n = draft.images.length;
+    var s = '<div class="card"><div class="lbl two"><span>このレシートの写真 ' + n + '枚（' + max + '枚まで）</span><span>番号＝上からの順</span></div><div class="thumbs">';
+    draft.images.forEach(function (b64, i) {
+      s += '<div class="th"><img src="data:image/jpeg;base64,' + b64 + '" alt=""><span>' + (i + 1) + '</span><button type="button" data-rm="' + i + '" aria-label="この写真を外す">✕</button></div>';
+    });
+    s += '</div>';
+    if (n < max) s += '<div class="row2"><button type="button" class="more" data-cam="cam">＋ 続きを撮る</button><button type="button" class="more" data-cam="pick">＋ 写真を足す</button></div>'
+      + '<div class="sub">長いレシートは、上から順に分けて撮って足してください（同じレシートの続き）</div>';
+    s += '<div class="q">何で払った？</div><div class="btns">' + opts('pay', [['カード', 'カード（アメックス）'], ['現金', '現金・PayPayなど']]) + '</div>'
+      + '<div class="q">何の買い物？</div><div class="btns">' + opts('kubun', [['家計', '家計'], ['事業', 'なおとの事業'], ['事業(ひょい)', 'ひょいの事業']]) + '</div>'
+      + '<input class="inp" type="text" id="rHito" maxlength="100" placeholder="ひとこと（なくてもOK　例：実家へのおみやげ）" value="' + attr(draft.hitokoto) + '">'
+      + '<button type="button" class="save" id="sendR">送る</button>'
+      + '<button type="button" class="link" id="cancelR">やめる（写真を捨てる）</button>'
+      + '<div class="sub">送ったあと、1時間以内にクロコが読んで内訳を入れます（PCが起きているとき）。'
+      + (draft.pay === '現金' ? '現金などは、読んだあと家計の支出に1行足します。' : 'カードは、同じ金額のカード明細にひもづけます（二重には数えません）。') + '</div></div>';
+    return s;
+  }
+  function opts(name, list) {
+    return list.map(function (o) {
+      return '<button type="button" class="btn' + (draft[name] === o[0] ? ' on' : '') + '" data-opt="' + name + '" data-val="' + attr(o[0]) + '">' + esc(o[1]) + '</button>';
+    }).join('');
+  }
+  function kubunLabel(k) { return k === '事業' ? 'なおとの事業' : (k === '事業(ひょい)' ? 'ひょいの事業' : '家計'); }
+  function receiptTags(r) {
+    var t = '';
+    if (r.state === '読み取り待ち') t += '<span class="tag wait">⏳読み取り待ち</span>';
+    else if (r.state === '読めない') t += '<span class="tag new">読めない</span>';
+    else if (r.pay === '現金') t += '<span class="tag cash">現金など</span>';
+    else t += r.linked ? '<span class="tag r">カード明細と一致</span>' : '<span class="tag wait">カード明細待ち</span>';
+    if (r.check && r.check !== 'OK') t += '<span class="tag new">合計ずれ</span>';
+    if (r.kubun !== '家計') t += '<span class="tag">' + kubunLabel(r.kubun) + '</span>';
+    return t;
+  }
+  function viewRlist() {
+    var rc = D.receipts, s = camButtons();
+    s += '<div class="card"><div class="lbl" style="margin-bottom:4px">' + Number(rc.ym.substring(5, 7)) + '月に買ったもの（レシート' + rc.count + '枚・合計 ' + yen(rc.sum) + '円）</div>';
+    if (!rc.bunrui.length) s += '<div class="sub">まだありません。レシートを撮ると、ここに分類ごとの合計が出ます</div>';
+    var max = Math.max.apply(null, rc.bunrui.map(function (b) { return b.amount; }).concat([1]));
+    rc.bunrui.forEach(function (b) {
+      s += '<div class="kv"><span>' + esc(b.bunrui) + '<span class="rbar"><i style="width:' + Math.max(0, b.amount / max * 100).toFixed(1) + '%"></i></span></span><b>' + yen(b.amount) + '</b></div>';
+    });
+    s += '</div><div class="card">';
+    if (!rc.list.length) s += '<div class="sub">まだありません</div>';
+    rc.list.forEach(function (r) {
+      var done = r.state === '読み取り済み';
+      var title = done ? r.store : (r.state === '読めない' ? '（読めませんでした）' : '（読み取り待ち）');
+      var d = done ? md(r.date) + ' ・ ' + r.items.length + '品 ・ ' + r.who
+        : md(r.sent) + ' ' + r.sent.substring(11, 16) + 'に送った ・ ' + r.who + ' ・ 写真' + r.photos + '枚';
+      s += '<div class="item tap" data-rid="' + attr(r.id) + '"><div>' + esc(title) + receiptTags(r) + '<div class="d">' + esc(d) + '</div></div>'
+        + '<div class="a">' + (done ? yen(r.total) : '—') + ' ›</div></div>';
+    });
+    return s + '</div><div class="sub center">先月と今月の分を出しています</div>';
+  }
+  function viewRone() {
+    var r = D.receipts.list.filter(function (x) { return x.id === rId; })[0];
+    if (!r) return '<div class="empty">このレシートは見つかりません</div><button type="button" class="link" data-go="rlist">‹ レシートの一覧へ</button>';
+    var done = r.state === '読み取り済み';
+    var s = '<button type="button" class="link" data-go="rlist" style="margin:0 0 6px">‹ レシートの一覧へ</button><div class="card">'
+      + '<div class="lbl">' + (done ? md(r.date) : md(r.sent) + 'に送った') + ' ・ ' + esc(r.who) + ' ・ ' + (r.pay === '現金' ? '現金など' : 'カード') + ' ・ ' + kubunLabel(r.kubun) + '</div>';
+    if (done) {
+      s += '<div class="rhead">' + esc(r.store) + '<b>' + yen(r.total) + '<span>円</span></b></div>' + receiptTags(r).replace(/<span class="tag">[^<]*<\/span>/, '');
+      if (r.check && r.check !== 'OK') s += '<div class="warnbox">合計が合いません：' + esc(r.check) + '。読み落としがあるかもしれません（写真を確認）</div>';
+      r.items.forEach(function (it) {
+        s += '<div class="kv"><span>' + esc(it.name) + '<small>' + esc(it.bunrui) + '</small></span><b' + (it.amount < 0 ? ' class="minus"' : '') + '>' + yen(it.amount) + '</b></div>';
+      });
+      s += '<div class="sub">明細の科目：' + esc(r.kamoku) + '（' + kubunLabel(r.kubun) + '）' + (r.note ? '<br>クロコのメモ：' + esc(r.note) : '') + '</div>';
+    } else if (r.state === '読めない') {
+      s += '<div class="warnbox">読めませんでした：' + esc(r.note) + '。消して撮り直してください</div>';
+    } else {
+      s += '<div class="sub">読み取り待ちです。1時間以内にクロコが読みます（PCが起きているとき）</div>';
+    }
+    if (r.hitokoto) s += '<div class="sub">ひとこと：' + esc(r.hitokoto) + '</div>';
+    s += '<div class="row2" style="margin-top:10px">';
+    for (var n = 1; n <= r.photos; n++) {
+      s += '<button type="button" class="more" data-rph="' + n + '">' + (rOpen[r.id + '_' + n] ? '写真' + n + 'を閉じる' : '📄 写真' + n + 'を見る') + '</button>';
+    }
+    s += '</div>';
+    for (var k = 1; k <= r.photos; k++) {
+      var key = r.id + '_' + k;
+      if (!rOpen[key]) continue;
+      var p = rPhotos[key];
+      s += !p || p.loading ? '<div class="sub">写真' + k + 'を読み込み中…</div>'
+        : (p.error ? '<div class="sub">写真' + k + 'を出せませんでした：' + esc(p.error) + '</div>' : '<img class="rphoto" src="data:image/jpeg;base64,' + p.image + '" alt="写真' + k + '">');
+    }
+    s += '<button type="button" class="link danger" data-rdel="' + attr(r.id) + '">このレシートを消す</button></div>';
+    return s;
+  }
+  // 長い辺を MAX_SIDE まで縮めてJPEGに（スマホの写真は5MB超＝そのままでは重い。レシートの字が読める大きさは残す）
+  function shrink(file) {
+    function draw(src, w, h) {
+      var k = Math.min(1, MAX_SIDE / Math.max(w, h));
+      var c = document.createElement('canvas');
+      c.width = Math.round(w * k);
+      c.height = Math.round(h * k);
+      c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.8).split(',')[1];
+    }
+    function viaImg() {
+      return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(file);
+        var img = new Image();
+        img.onload = function () { URL.revokeObjectURL(url); resolve(draw(img, img.naturalWidth, img.naturalHeight)); };
+        img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('写真を開けませんでした')); };
+        img.src = url;
+      });
+    }
+    if (window.createImageBitmap) {
+      return createImageBitmap(file, { imageOrientation: 'from-image' })
+        .then(function (bmp) { return draw(bmp, bmp.width, bmp.height); })
+        .catch(function () { return viaImg(); });
+    }
+    return viaImg();
+  }
+  function addFiles(files) {
+    files = Array.prototype.slice.call(files || []);
+    if (!files.length || !D || !D.receipts) return;
+    if (camFresh || !draft) draft = { images: [], pay: 'カード', kubun: '家計', hitokoto: '' };
+    var max = D.receipts.maxPhotos, room = max - draft.images.length;
+    if (files.length > room) toast('1枚のレシートにつき写真は' + max + '枚までです（' + room + '枚だけ足しました）');
+    files = files.slice(0, room);
+    if (!files.length) return;
+    Promise.all(files.map(shrink)).then(function (list) {
+      draft.images = draft.images.concat(list);
+      showTab('rnew');
+    }).catch(function (err) { toast(err && err.message ? err.message : '写真を開けませんでした'); });
+  }
+  function onReceiptClick(el) {
+    var cam = el.closest ? el.closest('[data-cam]') : null;
+    if (cam) {
+      camFresh = tab !== 'rnew';
+      $(cam.getAttribute('data-cam') === 'cam' ? 'camIn' : 'pickIn').click();
+      return true;
+    }
+    var rr = el.closest ? el.closest('[data-rid]') : null;
+    if (rr) { rId = rr.getAttribute('data-rid'); showTab('rone'); return true; }
+    if (tab === 'rnew' && draft) {
+      if (el.getAttribute('data-rm') != null) { draft.images.splice(Number(el.getAttribute('data-rm')), 1); keepHito(); render(); return true; }
+      if (el.getAttribute('data-opt')) { draft[el.getAttribute('data-opt')] = el.getAttribute('data-val'); keepHito(); render(); return true; }
+      if (el.id === 'cancelR') {
+        if (draft.images.length && !confirm('撮った写真を捨てますか？')) return true;
+        draft = null; showTab('home'); return true;
+      }
+      if (el.id === 'sendR') {
+        keepHito();
+        el.disabled = true;
+        el.textContent = '送っています…';
+        call('appReceiptSend', { images: draft.images, pay: draft.pay, kubun: draft.kubun, hitokoto: draft.hitokoto }, function () {
+          draft = null;
+          toast('送りました。1時間以内にクロコが読みます');
+          showTab('home');
+        });
+        return true;
+      }
+    }
+    if (tab === 'rone') {
+      if (el.getAttribute('data-rph')) {
+        var key = rId + '_' + el.getAttribute('data-rph'), id = rId, n = Number(el.getAttribute('data-rph'));
+        rOpen[key] = !rOpen[key];
+        if (rOpen[key] && (!rPhotos[key] || rPhotos[key].error)) {
+          rPhotos[key] = { loading: true };
+          API.call('appReceiptPhoto', { id: id, n: n }).then(function (res) {
+            rPhotos[key] = res && res.ok ? { image: res.image } : { error: res && res.error ? res.error : '読み込めませんでした' };
+            if (tab === 'rone') render();
+          }).catch(function (err) { rPhotos[key] = { error: err.message }; if (tab === 'rone') render(); });
+        }
+        render();
+        return true;
+      }
+      if (el.getAttribute('data-rdel')) {
+        var target = D.receipts.list.filter(function (x) { return x.id === rId; })[0];
+        if (!confirm('このレシートを消しますか？' + (target && target.pay === '現金' ? '（現金で足した家計の1行も消えます）' : ''))) return true;
+        call('appReceiptDelete', { id: el.getAttribute('data-rdel') }, function () { toast('消しました'); showTab('rlist'); });
+        return true;
+      }
+    }
+    return false;
+  }
+  function keepHito() { var h = $('rHito'); if (h && draft) draft.hitokoto = h.value.replace(/^\s+|\s+$/g, ''); }
+  ['camIn', 'pickIn'].forEach(function (id) {
+    $(id).addEventListener('change', function () { var f = this.files; addFiles(f); this.value = ''; });
+  });
+
   // ─── 画面の切り替え ───
   function render() {
     if (!D) return;
-    var titles = { home: '家計簿', pending: 'この支払い何？', shikin: '資金繰り', jigyo: '事業', zandaka: '残高を入れる' };
+    if (/^r/.test(tab) && !D.receipts) tab = 'home';
+    var titles = { home: '家計簿', pending: 'この支払い何？', shikin: '資金繰り', jigyo: '事業', zandaka: '残高を入れる', rnew: 'レシートを送る', rlist: 'レシート', rone: 'レシート' };
     $('title').textContent = titles[tab];
     var n = pendingCount();
     var sub = '';
@@ -439,10 +638,11 @@
     $('topSub').textContent = sub;
     $('badge').hidden = n === 0;
     $('badge').textContent = n;
-    var views = { home: viewHome, pending: viewPending, shikin: viewShikin, jigyo: viewJigyo, zandaka: viewZandaka };
+    var views = { home: viewHome, pending: viewPending, shikin: viewShikin, jigyo: viewJigyo, zandaka: viewZandaka, rnew: viewRnew, rlist: viewRlist, rone: viewRone };
     $('body').innerHTML = views[tab]();
+    var hl = /^r/.test(tab) ? 'home' : tab;
     var tabs = $('tabs').querySelectorAll('button');
-    for (var i = 0; i < tabs.length; i++) tabs[i].className = tabs[i].getAttribute('data-tab') === tab ? 'on' : '';
+    for (var i = 0; i < tabs.length; i++) tabs[i].className = tabs[i].getAttribute('data-tab') === hl ? 'on' : '';
   }
   function showTab(name) {
     tab = name;
@@ -465,6 +665,7 @@
     if (go && go !== this) { showTab(go.getAttribute('data-go')); return; }
     if (el.id === 'saveZ') { saveZandaka(); return; }
     if (el.id === 'saveJ') { saveJigyo(); return; }
+    if (onReceiptClick(el)) return;
     var jb = el;
     while (jb && jb !== this && !(jb.getAttribute && jb.getAttribute('data-jigyo'))) jb = jb.parentNode;
     if (jb && jb !== this) { jigyoSel = jb.getAttribute('data-jigyo'); render(); return; }
@@ -484,7 +685,7 @@
   // 別のアプリから戻ってきたときに、5分以上たっていたら読み直す
   var loadedAt = Date.now();
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && tab !== 'zandaka' && tab !== 'jigyo' && Date.now() - loadedAt > 5 * 60 * 1000) { loadedAt = Date.now(); call('appLoad'); }
+    if (document.visibilityState === 'visible' && tab !== 'zandaka' && tab !== 'jigyo' && tab !== 'rnew' && Date.now() - loadedAt > 5 * 60 * 1000) { loadedAt = Date.now(); call('appLoad'); }
   });
 
   call('appLoad');
