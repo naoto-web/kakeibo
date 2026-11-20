@@ -147,7 +147,7 @@
         }
         s += '</div>';
       });
-      s += '<div class="sub">科目をタップすると今月の明細が開きます。予算の金額はまだ仮です（2人で決めたら直します）</div></div>';
+      s += '<div class="sub">科目をタップすると今月の明細が開きます</div></div>';
     }
 
     s += '<div class="card"><div class="lbl">直近の利用</div>';
@@ -260,6 +260,28 @@
     var hantei = String(r.借入の判定 || '').replace(/（線は仮置き）/, '');
     s += '<div class="judge ' + color + '">判定：<b>' + esc(hantei) + '</b><div class="sub">'
       + r.線.yellow + 'か月を切ったら相談、' + r.線.blue + 'か月をこえたら借りない、の仮の線で出しています</div></div>';
+
+    // これからの12か月（予定の収入が入った場合）
+    var f = r.見通し;
+    if (f) {
+      var lowM = f.いちばん少ない月;
+      s += '<div class="card"><div class="lbl" style="margin-bottom:4px">これからの12か月（予定の収入が入った場合）</div>'
+        + '<div class="fsum">' + (f.マイナスになる月 ? '<b class="minus">' + esc(ymLabel(f.マイナスになる月)) + '末に手元がマイナス</b>になります'
+          : 'いちばん少ないのは <b>' + esc(ymLabel(lowM.月)) + '末の ' + yen(lowM.月末の手元) + '円</b>') + '</div>'
+        + '<div class="frow fh"><span>月</span><span>入る</span><span>出る</span><span>月末の手元</span></div>';
+      f.月ごと.forEach(function (x, i) {
+        var cls = x.月末の手元 < 0 ? 'minus' : (x.月末の手元 < f.毎月の支出 ? 'thin' : '');
+        var notes = x.入るの中身.map(function (n) { return esc(n.内容) + (n.見込み ? '（見込み）' : '') + ' ' + yen(n.金額); })
+          .concat(x.税の中身.map(function (z) { return '税・年金：' + esc(z.税目) + ' ' + yen(z.金額); }));
+        s += '<div class="frow"><span>' + Number(x.月.substring(5, 7)) + '月' + (i === 0 ? '<small>残り</small>' : '') + '</span>'
+          + '<span>' + (x.入る ? '+' + yen(x.入る) : '—') + '</span><span>−' + yen(x.出る + x.税) + '</span>'
+          + '<b class="' + cls + '">' + yen(x.月末の手元) + '</b></div>'
+          + (notes.length ? '<div class="fnote">' + notes.join('<br>') + '</div>' : '');
+      });
+      s += '<div class="sub">出る＝毎月の支出 ' + yen(f.毎月の支出) + '円（下の「毎月出ていくお金」）＋その月の税・年金。今月は残りの日数ぶん。'
+        + '入る＝入金予定の表（見込み＝まだ請求していない定期収入を含む）。出発点は手元のお金 ' + yen(f.出発点) + '円。'
+        + (f.支出1か月分を切る月 ? '黄色＝月末の手元が支出1か月分を切る月。' : '') + '</div></div>';
+    }
 
     s += '<div class="card"><div class="lbl" style="margin-bottom:4px">使えるお金</div>'
       + '<div class="kv"><span>手元のお金（' + r.残高.口座ごと.length + '口座）</span><b>' + yen(u.手元のお金) + '</b></div>'
