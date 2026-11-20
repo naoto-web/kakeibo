@@ -109,6 +109,34 @@
   .box.memo{width:170px;text-align:left;font-size:15px}
   .tabs button{font-size:10px}
 
+  /* ─── レシート ─── */
+  .cam{display:flex;gap:8px;margin-bottom:10px}
+  .cam button{flex:1;border:1px solid var(--accent);border-radius:14px;padding:12px 0;font-size:14px;font-weight:700;background:var(--accent);color:#fff}
+  .cam button.s{background:#fff;color:var(--accent)}
+  .go{width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .go b{color:var(--accent)}
+  .tag.cash{background:#fff7e6;color:var(--amber)}
+  .tag.r{background:#e6f4f3;color:var(--accent)}
+  .tag.wait{background:var(--chip);color:var(--sub)}
+  .item.tap{cursor:pointer}
+  .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .th{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fafbfc;aspect-ratio:3/4}
+  .th img{width:100%;height:100%;object-fit:cover;display:block}
+  .th span{position:absolute;left:6px;top:6px;background:rgba(31,41,51,.8);color:#fff;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px}
+  .th button{position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:13px;border:0;background:rgba(255,255,255,.92);font-size:13px;line-height:1;padding:0}
+  .row2{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .more{flex:1;min-width:40%;border:1px dashed var(--accent);background:#fff;color:var(--accent);border-radius:10px;padding:10px 0;font-size:13px;font-weight:700}
+  .q{font-size:12px;color:var(--sub);margin:12px 0 0}
+  .link{display:block;width:100%;background:none;border:0;color:var(--sub);font-size:12.5px;padding:10px 0 2px;text-align:center;text-decoration:underline}
+  .link.danger{color:var(--red);margin-top:6px}
+  .rbar{display:block;width:170px;height:8px;border-radius:4px;background:#dfe5ea;overflow:hidden;margin:3px 0 1px}
+  .rbar i{display:block;height:100%;background:var(--accent)}
+  .rhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:17px;font-weight:700;margin:6px 0 4px;word-break:break-all}
+  .rhead b{font-size:22px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .rhead b span{font-size:13px;margin-left:2px}
+  .warnbox{background:#fdecea;border:1px solid #f3c4bf;border-radius:10px;padding:8px 10px;font-size:12px;color:var(--red);margin:8px 0}
+  .rphoto{display:block;width:100%;border-radius:10px;border:1px solid var(--line);margin-top:8px}
+
   /* ─── アプリ版（GitHub Pages）で足した分 ─── */
   .top{padding-top:calc(14px + env(safe-area-inset-top))}
   .install{display:block;width:100%;border:0;background:var(--accent);color:#fff;border-radius:14px;padding:13px;font-weight:700;font-size:14px;margin-bottom:10px}
