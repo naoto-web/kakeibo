@@ -1,10 +1,11 @@
 (function () {
   var D = null;
   // URLの #jigyo などで最初に開くタブを選べる（動作確認用）
-  var tab = (location.hash.match(/^#(home|pending|shikin|jigyo|zandaka|rlist)$/) || [])[1] || 'home';
+  var tab = (location.hash.match(/^#(home|pending|shikin|jigyo|zandaka|rlist|mnew)$/) || [])[1] || 'home';
   var busy = false;
   var picks = {};
   var jigyoSel = 'なおと';
+  var openKam = {};
   var jigyoYm = '';
 
   function $(id) { return document.getElementById(id); }
@@ -84,10 +85,11 @@
   // ─── ① ホーム ───
   function viewHome() {
     var h = D.home, s = installCard(), rc = D.receipts;
-    if (rc) s += '<div class="cam"><button type="button" data-cam="cam">📷 レシートを撮る</button><button type="button" class="s" data-cam="pick">🖼 写真を選ぶ</button></div>';
+    if (rc) s += '<div class="cam three"><button type="button" data-cam="cam">📷 レシートを撮る</button><button type="button" class="s" data-cam="pick">🖼 写真を選ぶ</button>'
+      + (D.manual ? '<button type="button" class="s" data-go="mnew">✏️ 手で入れる</button>' : '') + '</div>';
     s += '<div class="card"><div class="lbl">' + h.month + '月 これまでに使ったお金（家計）</div>'
       + '<div class="big">' + yen(h.spent) + '<span>円</span></div>'
-      + (h.spentCash ? '<div class="sub">カード払い ' + yen(h.spent - h.spentCash) + '円 ＋ 現金など（レシート） ' + yen(h.spentCash) + '円</div>' : '')
+      + (h.spentCash ? '<div class="sub">カード払い ' + yen(h.spent - h.spentCash) + '円 ＋ 現金・PayPayなど ' + yen(h.spentCash) + '円</div>' : '')
       + '<div class="sub">' + h.prevMonth + '月は1か月で ' + yen(h.prevSpent) + '円（' + esc(h.avgLabel) + 'の平均 ' + yen(h.avg3) + '円）</div>'
       + (h.tokubetsu ? '<div class="sub">このほかに旅行・特別費 ' + yen(h.tokubetsu) + '円</div>' : '')
       + '</div>';
@@ -116,15 +118,28 @@
         var fill = Math.max(0, Math.min(100, b.spent / max * 100));
         var over = b.spent > b.budget;
         var warn = !over && b.spent / dayPct > b.budget * 0.95;
-        s += '<div class="bg"><div class="bh"><span>' + esc(b.kamoku) + '</span>'
+        var open = !!openKam[b.kamoku], its = (h.kamokuItems || {})[b.kamoku] || [];
+        s += '<div class="bg tap" data-kam="' + attr(b.kamoku) + '"><div class="bh"><span>' + (open ? '▾ ' : '▸ ') + esc(b.kamoku) + '<small class="cnt">' + its.length + '件</small></span>'
           + (over ? '<span class="ov"><b>' + yen(b.spent - b.budget) + '</b> オーバー</span>' : '<span>あと <b>' + yen(b.budget - b.spent) + '</b></span>')
           + '</div><div class="bb"><s style="width:' + track.toFixed(1) + '%"></s>'
           + '<i class="' + (over ? 'over' : (warn ? 'warn' : '')) + '" style="width:' + fill.toFixed(1) + '%"></i>'
           + '<u style="left:' + (track * dayPct).toFixed(1) + '%"></u></div>'
           + '<div class="bs">' + yen(b.spent) + ' / ' + yen(b.budget)
-          + (over ? '' : '　1日あたり ' + yen((b.budget - b.spent) / left) + '円まで') + '</div></div>';
+          + (over ? '' : '　1日あたり ' + yen((b.budget - b.spent) / left) + '円まで') + '</div>';
+        if (open) {
+          s += '<div class="kitems">';
+          if (!its.length) s += '<div class="sub">今月はまだありません</div>';
+          its.forEach(function (t) {
+            var rid = rc && rc.linked[t.importId];
+            s += '<div class="kit' + (rid ? ' tap" data-rid="' + attr(rid) : '') + '"><div>' + esc(t.desc)
+              + (t.cash ? '<span class="tag cash">現金など</span>' : '') + (rid ? '<span class="tag r">🧾内訳 ›</span>' : '')
+              + '<div class="d">' + md(t.date) + ' ・ ' + esc(t.owner) + '</div></div><b>' + yen(t.amount) + '</b></div>';
+          });
+          s += '</div>';
+        }
+        s += '</div>';
       });
-      s += '<div class="sub">予算の金額はまだ仮です（2人で決めたら直します）</div></div>';
+      s += '<div class="sub">科目をタップすると今月の明細が開きます。予算の金額はまだ仮です（2人で決めたら直します）</div></div>';
     }
 
     s += '<div class="card"><div class="lbl">直近の利用</div>';
@@ -652,15 +667,82 @@
   // URLの #r=レシートID で、そのレシートを直接開く（動作確認用）
   var hashR = location.hash.match(/^#r=([0-9A-Za-z-]+)$/);
   if (hashR) { rId = hashR[1]; tab = 'rone'; }
+  // #kam=食費 で、その科目の明細を開いた状態のホーム（動作確認用）
+  var hashK = location.hash.match(/^#kam=(.+)$/);
+  if (hashK) { try { openKam[decodeURIComponent(hashK[1])] = true; } catch (e) {} }
   ['camIn', 'pickIn'].forEach(function (id) {
     $(id).addEventListener('change', function () { var f = this.files; addFiles(f); this.value = ''; });
   });
 
+  // ─── レシートなしで入れる（現金・PayPay） ───
+  var mdraft = null;
+  function mInit() {
+    if (!mdraft) mdraft = { date: D.manual.today, amount: '', desc: '', pay: '現金', kubun: '家計', kamoku: '' };
+  }
+  function viewMnew() {
+    mInit();
+    var m = D.manual, list = m.kamoku[mdraft.kubun] || [];
+    if (list.indexOf(mdraft.kamoku) === -1) mdraft.kamoku = '';
+    var s = '<div class="card"><div class="lbl">レシートがない現金・PayPayの支払い（カード払いは自動で入るので入れない）</div>'
+      + '<div class="field"><div class="n">日付</div><input class="box date" type="date" id="mDate" max="' + m.today + '" value="' + attr(mdraft.date) + '"></div>'
+      + '<div class="field"><div class="n">金額</div><input class="box" type="text" inputmode="numeric" autocomplete="off" id="mAmt" placeholder="0" value="' + attr(mdraft.amount) + '"></div>'
+      + '<div class="field"><div class="n">何に</div><input class="box memo" type="text" maxlength="40" id="mDesc" placeholder="例：八百屋・ランチ" value="' + attr(mdraft.desc) + '"></div>'
+      + '<div class="q">払い方</div><div class="btns">' + mopts('pay', m.pays.map(function (p) { return [p, p === '現金' ? '💴 現金' : '📱 PayPay']; })) + '</div>'
+      + '<div class="q">何の買い物？</div><div class="btns">' + mopts('kubun', [['家計', '家計'], ['事業', 'なおとの事業'], ['事業(ひょい)', 'ひょいの事業']]) + '</div>'
+      + '<div class="q">科目</div><div class="btns">' + mopts('kamoku', list.map(function (k) { return [k, k]; })) + '</div>'
+      + '<button type="button" class="save" id="saveM" style="margin-top:12px">入れる</button></div>';
+    s += '<div class="card"><div class="lbl" style="margin-bottom:4px">最近手で入れたもの（入れ間違いはここで消す）</div>';
+    if (!m.recent.length) s += '<div class="sub">まだありません</div>';
+    m.recent.forEach(function (t) {
+      s += '<div class="kv"><span>' + esc(t.desc) + '<small>' + md(t.date) + ' ・ ' + esc(t.method) + ' ・ ' + esc(t.kamoku) + (t.kubun !== '家計' ? '（' + kubunLabel(t.kubun) + '）' : '') + '</small></span>'
+        + '<b>' + yen(t.amount) + ' <button type="button" class="mini" data-mdel="' + attr(t.importId) + '" data-mrow="' + t.row + '">消す</button></b></div>';
+    });
+    return s + '</div>';
+  }
+  function mopts(name, list) {
+    return list.map(function (o) {
+      return '<button type="button" class="btn' + (mdraft[name] === o[0] ? ' on' : '') + '" data-mopt="' + name + '" data-val="' + attr(o[0]) + '">' + esc(o[1]) + '</button>';
+    }).join('');
+  }
+  function keepM() {
+    if (!mdraft) return;
+    if ($('mDate')) mdraft.date = $('mDate').value;
+    if ($('mAmt')) mdraft.amount = $('mAmt').value;
+    if ($('mDesc')) mdraft.desc = $('mDesc').value;
+  }
+  function onManualClick(el) {
+    if (tab !== 'mnew') return false;
+    if (el.getAttribute('data-mopt')) { keepM(); mdraft[el.getAttribute('data-mopt')] = el.getAttribute('data-val'); render(); return true; }
+    if (el.id === 'saveM') {
+      keepM();
+      var amt = digits(mdraft.amount);
+      if (!amt) { toast('金額を入れてください'); return true; }
+      if (!mdraft.desc.replace(/\s/g, '')) { toast('何に使ったかを入れてください'); return true; }
+      if (!mdraft.kamoku) { toast('科目を選んでください'); return true; }
+      el.disabled = true;
+      el.textContent = '入れています…';
+      var req = { date: mdraft.date, amount: Number(amt), desc: mdraft.desc, pay: mdraft.pay, kubun: mdraft.kubun, kamoku: mdraft.kamoku };
+      call('appManualAdd', req, function () {
+        toast(md(req.date) + ' ' + yen(req.amount) + '円を入れました');
+        mdraft = { date: req.date, amount: '', desc: '', pay: req.pay, kubun: req.kubun, kamoku: '' };
+        render();
+      });
+      return true;
+    }
+    if (el.getAttribute('data-mdel')) {
+      if (!confirm('この1行を消しますか？')) return true;
+      keepM();
+      call('appManualDelete', { importId: el.getAttribute('data-mdel'), row: Number(el.getAttribute('data-mrow')) }, function () { toast('消しました'); });
+      return true;
+    }
+    return false;
+  }
+
   // ─── 画面の切り替え ───
   function render() {
     if (!D) return;
-    if (/^r/.test(tab) && !D.receipts) tab = 'home';
-    var titles = { home: '家計簿', pending: 'この支払い何？', shikin: '資金繰り', jigyo: '事業', zandaka: '残高を入れる', rnew: 'レシートを送る', rlist: 'レシート', rone: 'レシート' };
+    if ((/^r/.test(tab) && !D.receipts) || (tab === 'mnew' && !D.manual)) tab = 'home';
+    var titles = { home: '家計簿', pending: 'この支払い何？', shikin: '資金繰り', jigyo: '事業', zandaka: '残高を入れる', rnew: 'レシートを送る', rlist: 'レシート', rone: 'レシート', mnew: 'レシートなしで入れる' };
     $('title').textContent = titles[tab];
     var n = pendingCount();
     var sub = '';
@@ -672,9 +754,9 @@
     $('topSub').textContent = sub;
     $('badge').hidden = n === 0;
     $('badge').textContent = n;
-    var views = { home: viewHome, pending: viewPending, shikin: viewShikin, jigyo: viewJigyo, zandaka: viewZandaka, rnew: viewRnew, rlist: viewRlist, rone: viewRone };
+    var views = { home: viewHome, pending: viewPending, shikin: viewShikin, jigyo: viewJigyo, zandaka: viewZandaka, rnew: viewRnew, rlist: viewRlist, rone: viewRone, mnew: viewMnew };
     $('body').innerHTML = views[tab]();
-    var hl = /^r/.test(tab) ? 'home' : tab;
+    var hl = /^r|^mnew$/.test(tab) ? 'home' : tab;
     var tabs = $('tabs').querySelectorAll('button');
     for (var i = 0; i < tabs.length; i++) tabs[i].className = tabs[i].getAttribute('data-tab') === hl ? 'on' : '';
   }
@@ -700,6 +782,17 @@
     if (el.id === 'saveZ') { saveZandaka(); return; }
     if (el.id === 'saveJ') { saveJigyo(); return; }
     if (onReceiptClick(el)) return;
+    if (onManualClick(el)) return;
+    // 予算の棒をタップ＝その科目の今月の明細を開く／閉じる（開いた明細の中のタップでは閉じない）
+    var kam = el.closest ? el.closest('[data-kam]') : null;
+    if (kam && tab === 'home' && !el.closest('.kitems')) {
+      var kn = kam.getAttribute('data-kam');
+      openKam[kn] = !openKam[kn];
+      var top = $('body').scrollTop;
+      render();
+      $('body').scrollTop = top;
+      return;
+    }
     var jb = el;
     while (jb && jb !== this && !(jb.getAttribute && jb.getAttribute('data-jigyo'))) jb = jb.parentNode;
     if (jb && jb !== this) { jigyoSel = jb.getAttribute('data-jigyo'); render(); return; }
@@ -708,7 +801,7 @@
   });
   $('body').addEventListener('input', function (e) {
     if (tab === 'pending') { onPendingInput(e); return; }
-    if ((tab === 'zandaka' || tab === 'jigyo') && e.target.className === 'box') {
+    if ((tab === 'zandaka' || tab === 'jigyo' || tab === 'mnew') && e.target.className === 'box') {
       var v = digits(e.target.value);
       e.target.value = v === '' ? '' : yen(Number(v));
     }
@@ -719,7 +812,7 @@
   // 別のアプリから戻ってきたときに、5分以上たっていたら読み直す
   var loadedAt = Date.now();
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && tab !== 'zandaka' && tab !== 'jigyo' && tab !== 'rnew' && Date.now() - loadedAt > 5 * 60 * 1000) { loadedAt = Date.now(); call('appLoad'); }
+    if (document.visibilityState === 'visible' && tab !== 'zandaka' && tab !== 'jigyo' && tab !== 'rnew' && tab !== 'mnew' && Date.now() - loadedAt > 5 * 60 * 1000) { loadedAt = Date.now(); call('appLoad'); }
   });
 
   call('appLoad');
